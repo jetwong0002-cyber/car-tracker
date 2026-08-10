@@ -17,7 +17,7 @@ export async function onRequestGet(context) {
   let rows;
 
   if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) {
-    rows = await sql.query(
+    rows = await sql(
       `SELECT recorded_at, lat, lng, speed, motion
          FROM track_points
         WHERE recorded_at >= $1::date
@@ -27,7 +27,7 @@ export async function onRequestGet(context) {
     );
   } else {
     const days = Math.min(Math.max(parseInt(url.searchParams.get('days') || '1', 10), 1), 30);
-    rows = await sql.query(
+    rows = await sql(
       `SELECT recorded_at, lat, lng, speed, motion
          FROM track_points
         WHERE recorded_at >= now() - ($1 || ' days')::interval

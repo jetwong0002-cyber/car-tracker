@@ -48,7 +48,7 @@ export async function onRequestPost(context) {
         values.push(`($${o+1}, $${o+2}, $${o+3}, $${o+4}, $${o+5}, $${o+6}, $${o+7}, $${o+8})`);
         params.push(r.recorded_at, r.lat, r.lng, r.speed, r.altitude, r.h_accuracy, r.motion, r.battery);
       });
-      await sql.query(
+      await sql(
         `INSERT INTO track_points
            (recorded_at, lat, lng, speed, altitude, h_accuracy, motion, battery)
          VALUES ${values.join(',')}`,
@@ -57,7 +57,7 @@ export async function onRequestPost(context) {
     }
 
     // --- 滚动清理:顺手删 30 天前的点(有索引,毫秒级) ---
-    await sql.query(
+    await sql(
       `DELETE FROM track_points WHERE recorded_at < now() - interval '30 days'`
     );
   }

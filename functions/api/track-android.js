@@ -29,7 +29,7 @@ async function handle(context) {
   };
 
   const sql = neon(env.DATABASE_URL);
-  await sql.query(
+  await sql(
     `INSERT INTO track_points
        (recorded_at, lat, lng, speed, altitude, h_accuracy, motion, battery)
      VALUES ($1, $2, $3, $4, $5, $6, 'car_unit', $7)`,
@@ -38,7 +38,7 @@ async function handle(context) {
 
   // 滚动清理 30 天(单点插入很频繁,1% 概率触发一次就够,省数据库调用)
   if (Math.random() < 0.01) {
-    await sql.query(
+    await sql(
       `DELETE FROM track_points WHERE recorded_at < now() - interval '30 days'`
     );
   }
