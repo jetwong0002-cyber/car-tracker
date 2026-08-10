@@ -1,1 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>行车轨迹</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, sans-serif; }
+  #map { height: 100vh; width: 100vw; }
+  #panel {
+    position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+    z-index: 1000; background: #fff; border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,.25); padding: 10px 14px;
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center;
+  }
+  input, select, button {
+    font-size: 15px; padding: 7px 10px; border: 1px solid #ccc; border-radius: 8px;
+  }
+  button { background: #0a84ff; color: #fff; border: none; cursor: pointer; }
+  #info { font-size: 13px; color: #666; width: 100%; text-align: center; }
+</style>
+</head>
+<body>
+<div id="panel">
+  <input type="password" id="token" placeholder="Token" style="width:110px">
+  <input type="date" id="day">
+  <select id="days">
+    <option value="">按天数…</option>
+    <option value="1">今天</option>
+    <option value="3">最近3天</option>
+    <option value="7">最近7天</option>
+    <option value="30">最近30天</option>
+  </select>
+  <button onclick="load()">查看</button>
+  <div id="info"></div>
+</div>
+<div id="map"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+  const map = L.map('map').setView([2.03, 103.32], 12); // 默认居銮
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap'
+  }).addTo(map);
+
+  let layer = null;
+
+  async function load() {
+    const token = document.getElementById('token').value.trim();
+    const day = document.getElementById('day').value;
+    const days = document.getElementById('days').value;
+    if (!token) { alert('请输入 Token'); return; }
+
+    // 记住 token,下次不用重输(仅存内存,刷新后需重输)
+    const params = new URLSearchParams({ token });
+    if (day) params.set('day', day);
+    else if (days) params.set('days', days);
+
+    document.getElementById('info').textContent = '加载中…';
+    const res = await fetch('/api/history?' + params.toString());
+    if (!res.ok) {
+      document.getElementById('info').textContent = res.status === 401 ? 'Token 错误' : '加载失败';
+      return;
+    }
+    const data = await res.json();
+
+    if (layer) map.removeLayer(layer);
+    layer = L.geoJSON(data.geojson, {
+      style: { color: '#0a84ff', weight: 4, opacity: 0.85 }
+    }).addTo(map);
+
+    if (data.geojson.features.length > 0) {
+      map.fitBounds(layer.getBounds(), { padding: [40, 40] });
+    }
+    document.getElementById('info').textContent =
+      `${data.points} 个定位点 · ${data.geojson.features.length} 段轨迹`;
+  }
+</script>
+</body>
+</html>
