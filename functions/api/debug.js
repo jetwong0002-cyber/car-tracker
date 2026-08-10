@@ -1,21 +1,29 @@
+import { neon } from '@neondatabase/serverless';
+
 export async function onRequestGet(context) {
-  const stored = context.env.TRACK_TOKEN || '';
-  const url = new URL(context.request.url);
-  const given = url.searchParams.get('token') || '';
+  const out = {};
+  try {
+    const sql = neon(context.env.DATABASE_URL);
 
-  // 找出第一个不一样的位置
-  let diffAt = -1;
-  const max = Math.max(stored.length, given.length);
-  for (let i = 0; i < max; i++) {
-    if (stored[i] !== given[i]) { diffAt = i; break; }
+    // 测试1:数据库连得上吗
+    await sql.query('SELECT 1');
+    out.db_connect = true;
+
+    // 测试2:track_points 表存在吗
+    const t = await sql.query("SELECT to_regclass('public.track_points') AS tbl");
+    const row = Array.isArray(t) ? t[0] : t.rows?.[0];
+    out.table_exists = row?.tbl !== null;
+
+    // 测试3:能查吗
+    if (out.table_exists) {
+      const c = await sql.query('SELECT count(*) AS n FROM track_points');
+      const crow = Array.isArray(c) ? c[0] : c.rows?.[0];
+      out.row_count = Number(crow?.n);
+    }
+  } catch (e) {
+    out.error = String(e?.message || e);
   }
-
-  return new Response(JSON.stringify({
-    match: stored === given,          // 这个是终极答案
-    stored_length: stored.length,
-    given_length: given.length,
-    first_diff_at: diffAt,            // -1 = 完全一致
-    stored_around_diff: diffAt >= 0 ? stored.slice(Math.max(0, diffAt-3), diffAt+4) : null,
-    given_around_diff:  diffAt >= 0 ? given.slice(Math.max(0, diffAt-3), diffAt+4) : null,
-  }), { headers: { 'Content-Type': 'application/json' } });
+  return new Response(JSON.stringify(out), {
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
