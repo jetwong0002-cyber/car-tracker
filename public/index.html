@@ -26,11 +26,9 @@
 </head>
 <body>
 <div id="panel">
-  <!-- 第一次:输 token;之后自动记住 -->
-  <input type="password" id="token" placeholder="Token(只需输一次)" style="width:160px">
-  <button id="saveBtn" onclick="saveToken()">保存</button>
+  <input type="password" id="token" placeholder="密码" style="width:100px" inputmode="numeric">
+  <button id="saveBtn" onclick="saveToken()">进入</button>
 
-  <!-- 记住 token 后显示的日常界面 -->
   <select id="vehicle" class="hidden"></select>
   <select id="days" class="hidden">
     <option value="1">今天</option>
@@ -51,7 +49,7 @@
     attribution: '© OpenStreetMap'
   }).addTo(map);
 
-  let layer = null;
+  let layerGroup = L.layerGroup().addTo(map);
   const $ = id => document.getElementById(id);
   const getToken = () => localStorage.getItem('track_token') || '';
 
@@ -64,7 +62,7 @@
 
   function saveToken() {
     const t = $('token').value.trim();
-    if (!t) { alert('请输入 Token'); return; }
+    if (!t) { alert('请输入密码'); return; }
     localStorage.setItem('track_token', t);
     ui(); initVehicles();
   }
@@ -76,16 +74,43 @@
 
   async function initVehicles() {
     const res = await fetch('/api/history?list=vehicles&token=' + encodeURIComponent(getToken()));
-    if (res.status === 401) { alert('Token 错误'); clearToken(); return; }
+    if (res.status === 401) { alert('密码错误'); clearToken(); return; }
     const data = await res.json();
     const sel = $('vehicle');
-    sel.innerHTML = '<option value="">全部车辆</option>';
-    for (const v of (data.vehicles || [])) {
+    sel.innerHTML = '';
+    const vehicles = data.vehicles || [];
+    if (vehicles.length !== 1) {
+      const all = document.createElement('option');
+      all.value = ''; all.textContent = '全部车辆';
+      sel.appendChild(all);
+    }
+    for (const v of vehicles) {
       const o = document.createElement('option');
       o.value = v; o.textContent = v;
       sel.appendChild(o);
     }
-    load(); // 进来直接显示今天
+    load();
+  }
+
+  const fmtTime = iso => new Date(iso).toLocaleString('zh-MY', {
+    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false
+  });
+
+  // 沿线画方向箭头:每隔 N 个点取一段,算角度,放一个旋转的箭头图标
+  function addArrows(coords) {
+    const step = Math.max(2, Math.floor(coords.length / 8)); // 每段最多约8个箭头
+    for (let i = step; i < coords.length; i += step) {
+      const [lng1, lat1] = coords[i - 1];
+      const [lng2, lat2] = coords[i];
+      const angle = Math.atan2(lng2 - lng1, lat2 - lat1) * 180 / Math.PI; // 0=北,顺时针
+      const icon = L.divIcon({
+        className: '',
+        html: '<div style="transform: rotate(' + angle + 'deg); font-size: 16px; color: #0a84ff; text-shadow: 0 0 3px #fff, 0 0 3px #fff;">▲</div>',
+        iconSize: [16, 16],
+        iconAnchor: [8, 8],
+      });
+      L.marker([ (lat1+lat2)/2, (lng1+lng2)/2 ], { icon, interactive: false }).addTo(layerGroup);
+    }
   }
 
   async function load() {
@@ -94,18 +119,34 @@
 
     $('info').textContent = '加载中…';
     const res = await fetch('/api/history?' + params.toString());
-    if (res.status === 401) { alert('Token 已失效'); clearToken(); return; }
+    if (res.status === 401) { alert('密码已失效'); clearToken(); return; }
     if (!res.ok) { $('info').textContent = '加载失败'; return; }
     const data = await res.json();
 
-    if (layer) map.removeLayer(layer);
-    layer = L.geoJSON(data.geojson, {
-      style: { color: '#0a84ff', weight: 4, opacity: 0.85 }
-    }).addTo(map);
+    layerGroup.clearLayers();
+    const features = data.geojson.features || [];
+    let bounds = null;
 
-    if (data.geojson.features.length > 0) {
-      map.fitBounds(layer.getBounds(), { padding: [40, 40] });
-      $('info').textContent = `${data.points} 个定位点 · ${data.geojson.features.length} 段轨迹`;
+    for (const f of features) {
+      const coords = f.geometry.coordinates;
+      const latlngs = coords.map(c => [c[1], c[0]]);
+      const line = L.polyline(latlngs, { color: '#0a84ff', weight: 4, opacity: 0.85 })
+        .bindPopup('出发 ' + fmtTime(f.properties.start) + '<br>到达 ' + fmtTime(f.properties.end))
+        .addTo(layerGroup);
+
+      // 起点绿圆、终点红圆
+      L.circleMarker(latlngs[0], { radius: 7, color: '#fff', weight: 2, fillColor: '#34c759', fillOpacity: 1 })
+        .bindPopup('出发 ' + fmtTime(f.properties.start)).addTo(layerGroup);
+      L.circleMarker(latlngs[latlngs.length-1], { radius: 7, color: '#fff', weight: 2, fillColor: '#ff3b30', fillOpacity: 1 })
+        .bindPopup('到达 ' + fmtTime(f.properties.end)).addTo(layerGroup);
+
+      addArrows(coords);
+      bounds = bounds ? bounds.extend(line.getBounds()) : line.getBounds();
+    }
+
+    if (bounds) {
+      map.fitBounds(bounds, { padding: [40, 40] });
+      $('info').textContent = data.points + ' 个定位点 · ' + features.length + ' 段行程(绿=出发 红=到达)';
     } else {
       $('info').textContent = '这个时间范围没有轨迹';
     }
