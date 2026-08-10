@@ -28,12 +28,13 @@ async function handle(context) {
     return isFinite(v) ? v : null;
   };
 
+  const vehicle = (p.get('veh') || 'default').toUpperCase().slice(0, 20);
   const sql = neon(env.DATABASE_URL);
   await sql(
     `INSERT INTO track_points
-       (recorded_at, lat, lng, speed, altitude, h_accuracy, motion, battery)
-     VALUES ($1, $2, $3, $4, $5, $6, 'car_unit', $7)`,
-    [time, lat, lng, num('spd'), num('alt'), num('acc'), num('batt')]
+       (recorded_at, lat, lng, speed, altitude, h_accuracy, motion, battery, vehicle)
+     VALUES ($1, $2, $3, $4, $5, $6, 'car_unit', $7, $8)`,
+    [time, lat, lng, num('spd'), num('alt'), num('acc'), num('batt'), vehicle]
   );
 
   // 滚动清理 30 天(单点插入很频繁,1% 概率触发一次就够,省数据库调用)

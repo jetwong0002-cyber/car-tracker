@@ -13,6 +13,13 @@ export async function onRequestGet(context) {
   }
 
   const sql = neon(env.DATABASE_URL);
+  const vehicle = url.searchParams.get('veh');
+
+  // 车辆清单(给前端 dropdown 用)
+  if (url.searchParams.get('list') === 'vehicles') {
+    const vs = await sql(`SELECT DISTINCT vehicle FROM track_points ORDER BY vehicle`);
+    return json({ vehicles: vs.map(r => r.vehicle) });
+  }
   const day = url.searchParams.get('day'); // YYYY-MM-DD
   let rows;
 
@@ -22,8 +29,9 @@ export async function onRequestGet(context) {
          FROM track_points
         WHERE recorded_at >= $1::date
           AND recorded_at <  $1::date + interval '1 day'
+          AND ($2::text IS NULL OR vehicle = $2)
         ORDER BY recorded_at`,
-      [day]
+      [day, vehicle]
     );
   } else {
     const days = Math.min(Math.max(parseInt(url.searchParams.get('days') || '1', 10), 1), 30);
@@ -31,8 +39,9 @@ export async function onRequestGet(context) {
       `SELECT recorded_at, lat, lng, speed, motion
          FROM track_points
         WHERE recorded_at >= now() - ($1 || ' days')::interval
+          AND ($2::text IS NULL OR vehicle = $2)
         ORDER BY recorded_at`,
-      [String(days)]
+      [String(days), vehicle]
     );
   }
 
