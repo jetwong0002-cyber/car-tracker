@@ -8,19 +8,33 @@
 car-tracker/
 ├── functions/
 │   └── api/
-│       ├── track.js      ← 接收 Overland 上报
-│       └── history.js    ← 查询轨迹(返回 GeoJSON)
+│       ├── track.js          ← 接收 Overland(iPhone)上报
+│       ├── track-android.js  ← 接收 GPSLogger(Android 车机)上报
+│       └── history.js        ← 查询轨迹(GeoJSON)、车辆清单、最新位置
 ├── public/
-│   └── index.html        ← 地图查看页
+│   └── index.html            ← 地图查看页
 ├── package.json
-└── schema.sql            ← Neon 建表脚本
+└── schema.sql                ← Neon 建表脚本
 ```
+
+## 车辆标识 `veh`
+
+两个上报接口都支持在 URL 上带 `&veh=名字`(会转成大写,最长 20 字符),前端据此筛选。
+省略时:`/api/track` 记为 `IPHONE`,`/api/track-android` 记为 `DEFAULT`。
+只有一台设备在上报的话不用管它。
 
 ## 第一步:Neon 建表
 
 在 Neon 控制台开一个新 database(或用现有的开个新 schema 也行,但建议分开,别跟招聘管线混一起),SQL Editor 里跑 `schema.sql`。
 
 复制连接串(形如 `postgresql://user:pass@ep-xxx.aws.neon.tech/dbname?sslmode=require`)。
+
+**已经在用的库**:`schema.sql` 末尾那两句迁移也要跑一次(补 `vehicle` 列、把历史上没有车辆标识的点回填成 `IPHONE`),不然车辆下拉会多出一个查不到东西的空白项:
+
+```sql
+ALTER TABLE track_points ADD COLUMN IF NOT EXISTS vehicle TEXT;
+UPDATE track_points SET vehicle = 'IPHONE' WHERE vehicle IS NULL;
+```
 
 ## 第二步:推代码到 GitHub
 
@@ -47,7 +61,7 @@ App Store 搜 **Overland GPS Tracker**(开发者 Aaron Parecki,免费开源)。
 
 设置:
 - **Receiver Endpoint URL**:
-  `https://你的项目.pages.dev/api/track?token=你的TRACK_TOKEN`
+  `https://你的项目.pages.dev/api/track?token=你的TRACK_TOKEN&veh=IPHONE`
 - **Tracking**: On
 - **Desired Accuracy**: Best(开车场景)
 - **Significant Location / Motion**: 保持默认即可,它会自动在移动时密集采点、静止时省电
@@ -74,7 +88,10 @@ App Store 搜 **Overland GPS Tracker**(开发者 Aaron Parecki,免费开源)。
 ## 日常使用
 
 - 什么都不用管,Overland 后台自动跑
-- 想看轨迹:打开网页 → 输 token → 选日期或天数
+- 想看轨迹:打开网页 → 输 token → 选「今天/昨天/最近 N 天」或直接挑一个日期
+- 底部抽屉列出当天每段行程(时间、里程、时长、均速),点一条就跳到那段
+- 橙色脉冲点是车辆最后上报的位置;勾上「自动刷新」每分钟更新一次
+- 两段行程之间停车超过 10 分钟会标一个 P,点开看停了多久
 - 数据自动滚动保留 30 天,想改成 60 天就改 `track.js` 里的 `interval '30 days'`
 
 ## 费用

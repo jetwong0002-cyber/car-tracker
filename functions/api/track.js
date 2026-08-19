@@ -1,6 +1,7 @@
-// POST /api/track?token=xxx
+// POST /api/track?token=xxx&veh=IPHONE
 // 接收 Overland app 批量上报的 GPS 点,写入 Neon,并顺手删掉 30 天前的旧数据
 // 环境变量: DATABASE_URL (Neon 连接串), TRACK_TOKEN (自己随便生成的长密码)
+// veh 可省略(设备里配的老 URL 不带它),省略时记为 IPHONE
 
 import { neon } from '@neondatabase/serverless';
 
@@ -19,6 +20,9 @@ export async function onRequestPost(context) {
   } catch {
     return json({ error: 'invalid json' }, 400);
   }
+
+  // 车辆标识:老的 endpoint URL 不带 veh,默认按 IPHONE 记(留 NULL 的话前端下拉会多出空白项)
+  const vehicle = (url.searchParams.get('veh') || 'IPHONE').toUpperCase().slice(0, 20);
 
   const locations = Array.isArray(body?.locations) ? body.locations : [];
   const sql = neon(env.DATABASE_URL);
@@ -44,13 +48,13 @@ export async function onRequestPost(context) {
       const values = [];
       const params = [];
       rows.forEach((r, i) => {
-        const o = i * 8;
-        values.push(`($${o+1}, $${o+2}, $${o+3}, $${o+4}, $${o+5}, $${o+6}, $${o+7}, $${o+8})`);
-        params.push(r.recorded_at, r.lat, r.lng, r.speed, r.altitude, r.h_accuracy, r.motion, r.battery);
+        const o = i * 9;
+        values.push(`($${o+1}, $${o+2}, $${o+3}, $${o+4}, $${o+5}, $${o+6}, $${o+7}, $${o+8}, $${o+9})`);
+        params.push(r.recorded_at, r.lat, r.lng, r.speed, r.altitude, r.h_accuracy, r.motion, r.battery, vehicle);
       });
       await sql(
         `INSERT INTO track_points
-           (recorded_at, lat, lng, speed, altitude, h_accuracy, motion, battery)
+           (recorded_at, lat, lng, speed, altitude, h_accuracy, motion, battery, vehicle)
          VALUES ${values.join(',')}`,
         params
       );

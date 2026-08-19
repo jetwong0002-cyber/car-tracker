@@ -25,6 +25,8 @@
     --muted: #8b98ac;
     --accent: #00e5ff;
     --accent2: #7c4dff;
+    --car: #ff9f0a;
+    --sheet-h: 54px;                 /* 行程抽屉收起时的高度,底部控件按它让位 */
   }
   html, body { height: 100%; background: var(--bg); }
   body { font-family: -apple-system, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif; color: var(--text); }
@@ -76,12 +78,13 @@
     padding: 10px 12px;
     display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center;
   }
-  #panel select, #panel button {
+  #panel select, #panel button, #panel input[type=date] {
     font-size: 14px; padding: 8px 12px; border-radius: 10px;
     border: 1px solid var(--border); background: rgba(255,255,255,.06); color: var(--text);
-    outline: none; cursor: pointer;
+    outline: none; cursor: pointer; font-family: inherit;
   }
   #panel select option { background: #141c2c; color: var(--text); }
+  #panel input[type=date]::-webkit-calendar-picker-indicator { filter: invert(.8); cursor: pointer; }
   #loadBtn {
     background: linear-gradient(135deg, var(--accent), #46ffd4) !important;
     color: #041018 !important; border: none !important; font-weight: 700;
@@ -89,21 +92,72 @@
   #logout { color: #ff8fa0 !important; }
   .switch { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); user-select: none; cursor: pointer; }
   .switch input { accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer; }
+  /* 手机上让控制条铺满宽度,否则 flex 会缩成一根窄柱、控件一行一个,白占大半屏 */
+  @media (max-width: 480px) {
+    #panel { width: calc(100vw - 16px); padding: 10px 8px; gap: 6px; }
+    #panel select, #panel button, #panel input[type=date] { padding: 7px 9px; font-size: 13.5px; }
+  }
   #info { font-size: 12.5px; color: var(--muted); width: 100%; text-align: center; }
   #info .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin: 0 3px; vertical-align: middle; }
   .hidden { display: none !important; }
 
+  /* ---------- 行程抽屉 ---------- */
+  #sheet {
+    position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+    z-index: 1000; width: min(100vw, 560px);
+    background: var(--card); border: 1px solid var(--border); border-bottom: none;
+    border-radius: 18px 18px 0 0;
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    box-shadow: 0 -8px 30px rgba(0,0,0,.45);
+    overflow: hidden;
+  }
+  #sheetHandle {
+    width: 100%; height: var(--sheet-h); padding: 0 16px;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    background: none; border: none; color: var(--text); font: inherit; font-size: 13.5px;
+    cursor: pointer; text-align: left;
+  }
+  #sheetHandle .chev { color: var(--muted); font-size: 11px; transition: transform .25s ease; flex: none; }
+  #sheet.open #sheetHandle .chev { transform: rotate(180deg); }
+  #sheetSummary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #sheetSummary b { color: var(--accent); font-weight: 700; }
+  #tripList {
+    max-height: 0; overflow: hidden;
+    transition: max-height .28s ease;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  #sheet.open #tripList { max-height: 45vh; overflow-y: auto; }
+  .trip {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px; cursor: pointer;
+    border-top: 1px solid rgba(255,255,255,.07);
+    transition: background .15s;
+  }
+  .trip:hover { background: rgba(255,255,255,.05); }
+  .trip.sel { background: rgba(0,229,255,.12); }
+  .trip .swatch { width: 4px; align-self: stretch; min-height: 30px; border-radius: 2px; flex: none; }
+  .trip .t1 { font-size: 13.5px; font-weight: 600; }
+  .trip .t2 { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
   /* ---------- 定位按钮 ---------- */
   #locateBtn {
-    position: fixed; right: 14px; bottom: max(28px, env(safe-area-inset-bottom)); z-index: 1000;
+    position: fixed; right: 14px; z-index: 1000;
+    bottom: calc(20px + env(safe-area-inset-bottom));
     width: 48px; height: 48px; border-radius: 50%; padding: 0;
     background: var(--card); color: var(--accent);
     border: 1px solid var(--border);
     backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
     box-shadow: 0 6px 20px rgba(0,0,0,.45);
     font-size: 21px; line-height: 1; cursor: pointer;
+    transition: bottom .25s ease, opacity .2s;
   }
   #locateBtn:disabled { opacity: .55; cursor: wait; }
+  /* 抽屉出现时,底部控件整体上移;抽屉展开时让位隐藏 */
+  body.has-sheet #locateBtn { bottom: calc(var(--sheet-h) + 14px + env(safe-area-inset-bottom)); }
+  .leaflet-bottom.leaflet-left { transition: bottom .25s ease, opacity .2s; }
+  body.has-sheet .leaflet-bottom.leaflet-left { bottom: calc(var(--sheet-h) + env(safe-area-inset-bottom)); }
+  body.sheet-open #locateBtn,
+  body.sheet-open .leaflet-bottom.leaflet-left { opacity: 0; pointer-events: none; }
 
   /* ---------- 地图元素 ---------- */
   .me-pulse {
@@ -116,9 +170,25 @@
     70%  { box-shadow: 0 0 0 16px rgba(0,229,255,0); }
     100% { box-shadow: 0 0 0 0 rgba(0,229,255,0); }
   }
+  .car-pulse {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--car); border: 3px solid #fff;
+    animation: pulseCar 2s infinite;
+  }
+  @keyframes pulseCar {
+    0%   { box-shadow: 0 0 0 0 rgba(255,159,10,.7); }
+    70%  { box-shadow: 0 0 0 18px rgba(255,159,10,0); }
+    100% { box-shadow: 0 0 0 0 rgba(255,159,10,0); }
+  }
   .ep { width: 14px; height: 14px; border-radius: 50%; border: 2.5px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
   .ep.start { background: #34c759; }
   .ep.end   { background: #ff3b30; }
+  .park {
+    width: 22px; height: 22px; border-radius: 7px;
+    background: rgba(17,25,40,.92); border: 2px solid #fff;
+    color: #fff; font-size: 13px; font-weight: 700; line-height: 18px; text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,.6);
+  }
   .arrow { font-size: 15px; text-shadow: 0 0 4px rgba(0,0,0,.9); }
 
   .leaflet-popup-content-wrapper {
@@ -153,7 +223,7 @@
     <div class="logo">🛰️</div>
     <h1>行车轨迹</h1>
     <p>输入密码查看车辆轨迹</p>
-    <input type="password" id="token" placeholder="••••••" inputmode="numeric" autocomplete="current-password">
+    <input type="password" id="token" placeholder="••••••" autocomplete="current-password">
     <button id="saveBtn" onclick="saveToken()">进入</button>
     <div class="err" id="loginErr"></div>
   </div>
@@ -163,15 +233,28 @@
 <div id="panel" class="hidden">
   <select id="vehicle"></select>
   <select id="days">
-    <option value="1">今天</option>
+    <option value="today">今天</option>
+    <option value="yesterday">昨天</option>
     <option value="3">最近3天</option>
     <option value="7">最近7天</option>
     <option value="30">最近30天</option>
+    <option value="custom">选择日期…</option>
   </select>
+  <input type="date" id="pickDay" class="hidden">
   <label class="switch" title="把轨迹吸附到真实道路"><input type="checkbox" id="snapRoad" checked>贴路</label>
+  <label class="switch" title="每分钟刷新一次车辆最新位置"><input type="checkbox" id="autoRefresh">自动刷新</label>
   <button id="loadBtn" onclick="load()">查看</button>
   <button id="logout" onclick="clearToken()">退出</button>
   <div id="info"></div>
+</div>
+
+<!-- 行程列表 -->
+<div id="sheet" class="hidden">
+  <button id="sheetHandle" type="button" onclick="toggleSheet()">
+    <span id="sheetSummary"></span>
+    <span class="chev">▲</span>
+  </button>
+  <div id="tripList"></div>
 </div>
 
 <button id="locateBtn" class="hidden" type="button" title="定位到我（仅点一次才取定位）" aria-label="定位到我" onclick="locateMe()">◎</button>
@@ -181,7 +264,8 @@
 <script>
   // ================== 地图 ==================
   const DEFAULT_VIEW = { center: [2.03, 103.32], zoom: 12 };
-  const map = L.map('map', { zoomControl: false }).setView(DEFAULT_VIEW.center, DEFAULT_VIEW.zoom);
+  // preferCanvas:看 30 天轨迹时上百条 polyline 走 canvas,比 SVG 省很多
+  const map = L.map('map', { zoomControl: false, preferCanvas: true }).setView(DEFAULT_VIEW.center, DEFAULT_VIEW.zoom);
   L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
   // 深色底图(免费,无需 key);想换回浅色把 dark_all 改成 light_all
@@ -191,6 +275,9 @@
 
   const routeLayer = L.layerGroup().addTo(map);   // 所有轨迹相关图层都放这里,退出时一键清空
   let meMarker = null;
+  let carMarker = null;      // 车辆最新位置(不放 routeLayer,否则重新查询会被清掉)
+  let autoTimer = null;
+  let trips = [];            // 当前画出来的行程(给抽屉列表用)
   let locating = false;
   let gen = 0;    // 请求代号:退出登录后 +1,旧请求回来时发现代号不对就直接丢弃,防止"清完又画回来"
 
@@ -199,6 +286,8 @@
 
   // 每段行程一个霓虹色,循环使用
   const COLORS = ['#00e5ff', '#7c4dff', '#ff9f0a', '#34d399', '#ff5c8a', '#facc15'];
+  const ARROW_BUDGET = 120;    // 全图方向箭头总数上限(每个都是一个 DOM marker)
+  const PARK_MIN_MS = 10 * 60 * 1000;   // 停车少于 10 分钟不标(和服务端拆段阈值一致)
 
   // ================== 登录 / 退出 ==================
   function ui() {
@@ -222,11 +311,15 @@
     localStorage.removeItem('track_token');       // ② 清凭证
     routeLayer.clearLayers();                     // ③ 清全部轨迹/箭头/起终点 —— 之前漏了这一步,标记才会残留
     if (meMarker) { map.removeLayer(meMarker); meMarker = null; }
+    if (carMarker) { map.removeLayer(carMarker); carMarker = null; }
+    stopAuto();                                   // ④ 停掉自动刷新定时器
+    trips = [];
+    hideSheet();
     map.closePopup();
     $('vehicle').innerHTML = '';
     $('info').textContent = '';
     setLoading(false);
-    map.setView(DEFAULT_VIEW.center, DEFAULT_VIEW.zoom);   // ④ 回到默认视角,不暴露最后看过的位置
+    map.setView(DEFAULT_VIEW.center, DEFAULT_VIEW.zoom);   // ⑤ 回到默认视角,不暴露最后看过的位置
     ui();
   }
 
@@ -255,16 +348,60 @@
       sel.appendChild(o);
     }
     load();
+    setAuto($('autoRefresh').checked);
   }
 
+  // ================== 时间 / 数字格式 ==================
   const fmtTime = iso => new Date(iso).toLocaleString('zh-MY', {
     month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false
   });
+  const fmtClock = iso => new Date(iso).toLocaleTimeString('zh-MY', {
+    hour: '2-digit', minute: '2-digit', hour12: false
+  });
+  const fmtKm = m => m >= 1000 ? (m / 1000).toFixed(1) + ' km' : Math.round(m) + ' m';
+
+  function fmtDur(ms) {
+    const min = Math.round(ms / 60000);
+    if (min < 60) return min + ' 分';
+    return Math.floor(min / 60) + ' 小时 ' + (min % 60) + ' 分';
+  }
+
+  function agoText(iso) {
+    const s = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (s < 0) return '刚刚';
+    if (s < 90) return '刚刚';
+    if (s < 3600) return Math.round(s / 60) + ' 分钟前';
+    if (s < 86400) return Math.round(s / 3600) + ' 小时前';
+    return Math.round(s / 86400) + ' 天前';
+  }
+
+  // 本地日历日 YYYY-MM-DD(offset=-1 就是昨天)
+  // 注意:不能用 toISOString(),那是 UTC,马来西亚会差 8 小时
+  function localDayStr(offset) {
+    const d = new Date();
+    d.setDate(d.getDate() + (offset || 0));
+    const pad = n => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
 
   function setLoading(on, pct) {
     const bar = $('loadingBar');
     bar.classList.toggle('on', !!on);
     bar.style.width = on ? (pct || 30) + '%' : '0%';
+  }
+
+  // 时间范围 → 查询参数。今天/昨天走 day=(真·日历日),其余走 days=(最近 N 天)
+  function rangeParams() {
+    const p = new URLSearchParams({ token: getToken() });
+    const v = $('days').value;
+    if (v === 'today') p.set('day', localDayStr(0));
+    else if (v === 'yesterday') p.set('day', localDayStr(-1));
+    else if (v === 'custom') {
+      const d = $('pickDay').value;
+      if (d) p.set('day', d); else p.set('day', localDayStr(0));
+    } else p.set('days', v);
+    if ($('vehicle').value) p.set('veh', $('vehicle').value);
+    return p;
   }
 
   // ================== GPS 降噪 ==================
@@ -283,6 +420,15 @@
     }
     out.push(coords[coords.length-1]);
     return out;
+  }
+
+  // 行程里程/时长/均速。用**贴路前的原始点**算,贴路后的线长度会变
+  function tripStats(coords, startISO, endISO) {
+    let dist = 0;
+    for (let i = 1; i < coords.length; i++) dist += distM(coords[i-1], coords[i]);
+    const ms = Math.max(0, new Date(endISO).getTime() - new Date(startISO).getTime());
+    const hrs = ms / 3600000;
+    return { m: dist, ms, kmh: hrs > 0 ? (dist / 1000) / hrs : 0 };
   }
 
   // ================== OSRM 贴路(map matching) ==================
@@ -347,17 +493,18 @@
   }
 
   // ================== 画一段行程:发光双线 + 方向箭头 ==================
-  function drawSegment(latlngs, color, popupHtml) {
+  function drawSegment(latlngs, color, popupHtml, arrowCount) {
     // 底层粗透明当光晕,上层实线
     L.polyline(latlngs, { color, weight: 11, opacity: .22, lineJoin: 'round', lineCap: 'round', interactive: false }).addTo(routeLayer);
     const line = L.polyline(latlngs, { color, weight: 4, opacity: .95, lineJoin: 'round', lineCap: 'round' })
       .bindPopup(popupHtml).addTo(routeLayer);
-    addArrows(latlngs, color);
+    addArrows(latlngs, color, arrowCount);
     return line;
   }
 
-  function addArrows(latlngs, color) {
-    const step = Math.max(2, Math.floor(latlngs.length / 8));
+  function addArrows(latlngs, color, count) {
+    if (!count || count < 1 || latlngs.length < 2) return;
+    const step = Math.max(2, Math.floor(latlngs.length / (count + 1)));
     for (let i = step; i < latlngs.length; i += step) {
       const [lat1, lng1] = latlngs[i-1];
       const [lat2, lng2] = latlngs[i];
@@ -376,17 +523,80 @@
     L.marker(latlng, { icon }).bindPopup(popupHtml).addTo(routeLayer);
   }
 
+  // 相邻两段行程之间就是一次停车,数据已有,纯前端算
+  function drawParking() {
+    for (let i = 0; i < trips.length - 1; i++) {
+      const from = trips[i], to = trips[i+1];
+      const ms = new Date(to.start).getTime() - new Date(from.end).getTime();
+      if (ms < PARK_MIN_MS) continue;
+      const icon = L.divIcon({
+        className: '',
+        html: '<div class="park">P</div>',
+        iconSize: [22, 22], iconAnchor: [11, 28],   // 往上抬,别压住红色的到达点
+      });
+      L.marker(from.endLatLng, { icon })
+        .bindPopup('<b>停车 ' + fmtDur(ms) + '</b><br>' + fmtTime(from.end) + ' → ' + fmtTime(to.start))
+        .addTo(routeLayer);
+    }
+  }
+
+  // ================== 行程抽屉 ==================
+  function toggleSheet() {
+    const open = $('sheet').classList.toggle('open');
+    document.body.classList.toggle('sheet-open', open);
+  }
+
+  function hideSheet() {
+    $('sheet').classList.add('hidden');
+    $('sheet').classList.remove('open');
+    document.body.classList.remove('has-sheet', 'sheet-open');
+    $('tripList').innerHTML = '';
+  }
+
+  function renderSheet() {
+    if (!trips.length) { hideSheet(); return; }
+
+    const totM = trips.reduce((s, t) => s + t.stats.m, 0);
+    const totMs = trips.reduce((s, t) => s + t.stats.ms, 0);
+    $('sheetSummary').innerHTML =
+      '<b>' + trips.length + '</b> 段行程 · <b>' + fmtKm(totM) + '</b> · ' + fmtDur(totMs);
+
+    const list = $('tripList');
+    list.innerHTML = '';
+    trips.forEach((t, i) => {
+      const row = document.createElement('div');
+      row.className = 'trip';
+      row.innerHTML =
+        '<span class="swatch" style="background:' + t.color + '"></span>' +
+        '<div><div class="t1">' + fmtTime(t.start) + ' → ' + fmtClock(t.end) + '</div>' +
+        '<div class="t2">' + fmtKm(t.stats.m) + ' · ' + fmtDur(t.stats.ms) +
+        ' · 均速 ' + Math.round(t.stats.kmh) + ' km/h</div></div>';
+      row.onclick = () => selectTrip(i);
+      list.appendChild(row);
+    });
+
+    $('sheet').classList.remove('hidden');
+    document.body.classList.add('has-sheet');
+  }
+
+  function selectTrip(i) {
+    const t = trips[i];
+    if (!t) return;
+    [...$('tripList').children].forEach((el, k) => el.classList.toggle('sel', k === i));
+    map.fitBounds(t.line.getBounds(), { padding: [50, 50] });
+    t.line.openPopup();
+  }
+
   // ================== 主加载 ==================
   async function load() {
     const myGen = gen;
-    const params = new URLSearchParams({ token: getToken(), days: $('days').value });
-    if ($('vehicle').value) params.set('veh', $('vehicle').value);
+    if (!getToken()) return;
 
     $('info').textContent = '加载中…';
     setLoading(true, 20);
     let res;
     try {
-      res = await fetch('/api/history?' + params.toString());
+      res = await fetch('/api/history?' + rangeParams().toString());
     } catch { if (myGen === gen) { $('info').textContent = '网络错误'; setLoading(false); } return; }
     if (myGen !== gen) return;
     if (res.status === 401) { setLoading(false); clearToken(); $('loginErr').textContent = '密码已失效'; return; }
@@ -395,17 +605,25 @@
     if (myGen !== gen) return;
 
     routeLayer.clearLayers();
-    const features = data.geojson.features || [];
+    trips = [];
+    const features = (data.geojson && data.geojson.features) || [];
     const useSnap = $('snapRoad').checked;
     let bounds = null;
     let snapped = 0;
 
+    // 段数多时每段少画箭头,避免铺出上千个 DOM marker
+    const arrowsPerSeg = features.length ? Math.min(8, Math.floor(ARROW_BUDGET / features.length)) : 0;
+
     for (let idx = 0; idx < features.length; idx++) {
       if (myGen !== gen) return;                  // 中途退出立即停手
       const f = features[idx];
-      const coords = f.geometry.coordinates;       // [lng,lat][]
+      const coords = f.geometry.coordinates;       // [lng,lat][] 原始点
       const color = COLORS[idx % COLORS.length];
-      const popup = '<b>行程 ' + (idx+1) + '</b><br>出发 ' + fmtTime(f.properties.start) + '<br>到达 ' + fmtTime(f.properties.end);
+      const st = tripStats(coords, f.properties.start, f.properties.end);
+      const popup = '<b>行程 ' + (idx+1) + '</b><br>出发 ' + fmtTime(f.properties.start)
+                  + '<br>到达 ' + fmtTime(f.properties.end)
+                  + '<br>' + fmtKm(st.m) + ' · ' + fmtDur(st.ms)
+                  + ' · 均速 ' + Math.round(st.kmh) + ' km/h';
 
       let latlngs = null;
       if (useSnap) {
@@ -416,15 +634,24 @@
       }
       if (!latlngs) latlngs = smoothLatLngs(coords.map(c => [c[1], c[0]]));   // 贴路失败 → 平滑折线兜底
 
-      const line = drawSegment(latlngs, color, popup);
+      const line = drawSegment(latlngs, color, popup, arrowsPerSeg);
       const raw = coords.map(c => [c[1], c[0]]);
       endpointMarker(raw[0], 'start', '出发 ' + fmtTime(f.properties.start));
       endpointMarker(raw[raw.length-1], 'end', '到达 ' + fmtTime(f.properties.end));
       bounds = bounds ? bounds.extend(line.getBounds()) : line.getBounds();
+
+      trips.push({
+        line, color,
+        start: f.properties.start, end: f.properties.end,
+        stats: st, endLatLng: raw[raw.length-1],
+      });
     }
 
     setLoading(false);
     if (myGen !== gen) return;
+
+    drawParking();
+    renderSheet();
 
     if (bounds) {
       map.fitBounds(bounds, { padding: [40, 40] });
@@ -436,7 +663,58 @@
     } else {
       $('info').textContent = '这个时间范围没有轨迹';
     }
+
+    loadLatest();     // 顺手更新一次"车在哪"
   }
+
+  // ================== 车辆最新位置("车在哪") ==================
+  async function loadLatest() {
+    const myGen = gen;
+    if (!getToken()) return;
+    const p = new URLSearchParams({ token: getToken(), latest: '1' });
+    if ($('vehicle').value) p.set('veh', $('vehicle').value);
+
+    let res;
+    try { res = await fetch('/api/history?' + p.toString()); } catch { return; }
+    if (myGen !== gen || !res.ok) return;
+    const data = await res.json();
+    if (myGen !== gen || !getToken()) return;
+
+    const t = data.latest;
+    if (!t) return;
+
+    const latlng = [t.lat, t.lng];
+    const html = '<b>' + (t.vehicle || '车辆') + '</b><br>最后上报 ' + agoText(t.recorded_at)
+               + '<br>' + fmtTime(t.recorded_at)
+               + (t.battery != null ? '<br>电量 ' + Math.round(t.battery > 1 ? t.battery : t.battery * 100) + '%' : '');
+
+    if (carMarker) {
+      carMarker.setLatLng(latlng).setPopupContent(html);
+    } else {
+      const icon = L.divIcon({ className: '', html: '<div class="car-pulse"></div>', iconSize: [18,18], iconAnchor: [9,9] });
+      carMarker = L.marker(latlng, { icon, zIndexOffset: 900 }).bindPopup(html).addTo(map);
+    }
+  }
+
+  // ================== 自动刷新 ==================
+  function stopAuto() {
+    if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+  }
+
+  function setAuto(on) {
+    stopAuto();
+    if (on && getToken()) {
+      autoTimer = setInterval(() => {
+        if (document.hidden) return;      // 页面在后台就跳过这一轮
+        loadLatest();
+      }, 60000);
+    }
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    // 切回前台立刻补一次,不用干等到下一个整分钟
+    if (!document.hidden && $('autoRefresh').checked && getToken()) loadLatest();
+  });
 
   // ================== 定位(仅点按时取一次,不 watch) ==================
   function locateMe() {
@@ -471,8 +749,22 @@
     );
   }
 
-  // 回车登录
+  // ================== 事件绑定 ==================
   $('token').addEventListener('keydown', e => { if (e.key === 'Enter') saveToken(); });
+
+  $('days').addEventListener('change', () => {
+    const custom = $('days').value === 'custom';
+    $('pickDay').classList.toggle('hidden', !custom);
+    if (custom) {
+      if (!$('pickDay').value) $('pickDay').value = localDayStr(0);
+      $('pickDay').focus();
+    }
+    load();
+  });
+  $('pickDay').addEventListener('change', load);
+  $('vehicle').addEventListener('change', load);
+  $('snapRoad').addEventListener('change', load);
+  $('autoRefresh').addEventListener('change', e => setAuto(e.target.checked));
 
   ui();
   if (getToken()) initVehicles();
